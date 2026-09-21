@@ -3,6 +3,7 @@ import './App.css';
 import { supabase } from './supabaseClient';
 import { BiosignalProcessor } from './processor';
 
+// 1. Emergency Protocols Database
 const EMERGENCY_PROTOCOLS = {
   'Ventricular Tachycardia': {
     title: 'CARDIAC ARREST / TACHYARRHYTHMIA PROTOCOL',
@@ -27,7 +28,8 @@ const EMERGENCY_PROTOCOLS = {
     ]
   }
 };
-// Real-time Biosignal Canvas ECG Oscilloscope
+
+// 2. Real-Time 60 FPS Canvas ECG Oscilloscope Component
 function ECGWaveform({ isArrhythmia }) {
   const canvasRef = useRef(null);
 
@@ -41,12 +43,10 @@ function ECGWaveform({ isArrhythmia }) {
     const width = canvas.width;
     const mid = height / 2;
 
-    // Clear canvas initial background
     ctx.fillStyle = '#070b0f';
     ctx.fillRect(0, 0, width, height);
 
     const render = () => {
-      // Create trailing phosphor sweep effect
       ctx.fillStyle = 'rgba(7, 11, 15, 0.08)';
       ctx.fillRect(x, 0, 8, height);
 
@@ -54,7 +54,6 @@ function ECGWaveform({ isArrhythmia }) {
       const cycle = x % (isArrhythmia ? 45 : 90);
 
       if (isArrhythmia) {
-        // Chaotic Ventricular Tachycardia Waveform (Wide QRS & Arrhythmic peaks)
         if (cycle > 10 && cycle < 18) {
           y = mid - Math.sin((cycle - 10) * 0.4) * (mid * 0.85);
         } else if (cycle >= 18 && cycle < 28) {
@@ -63,29 +62,21 @@ function ECGWaveform({ isArrhythmia }) {
           y = mid + (Math.random() * 8 - 4);
         }
       } else {
-        // Normal Sinus Rhythm (P - QRS - T complex)
         if (cycle > 15 && cycle < 25) {
-          // P-Wave
-          y = mid - Math.sin((cycle - 15) * 0.314) * 8;
+          y = mid - Math.sin((cycle - 15) * 0.314) * 8; // P-Wave
         } else if (cycle >= 28 && cycle < 31) {
-          // Q-Dip
-          y = mid + 6;
+          y = mid + 6; // Q-Dip
         } else if (cycle >= 31 && cycle < 36) {
-          // R-Peak (Sharp ventricular spike)
-          y = mid - (mid * 0.75);
+          y = mid - (mid * 0.75); // R-Peak
         } else if (cycle >= 36 && cycle < 40) {
-          // S-Dip
-          y = mid + 12;
+          y = mid + 12; // S-Dip
         } else if (cycle >= 48 && cycle < 62) {
-          // T-Wave (Ventricular repolarization)
-          y = mid - Math.sin((cycle - 48) * 0.224) * 14;
+          y = mid - Math.sin((cycle - 48) * 0.224) * 14; // T-Wave
         } else {
-          // Isoelectric baseline with subtle sensor jitter
           y = mid + (Math.random() * 2 - 1);
         }
       }
 
-      // Draw active telemetry sweep line
       ctx.strokeStyle = isArrhythmia ? '#ef4444' : '#38bdf8';
       ctx.lineWidth = 1.8;
       ctx.beginPath();
@@ -131,12 +122,14 @@ function ECGWaveform({ isArrhythmia }) {
       <canvas
         ref={canvasRef}
         width={860}
-        height={100}
-        style={{ width: '100%', height: '100px', display: 'block' }}
+        height={90}
+        style={{ width: '100%', height: '90px', display: 'block' }}
       />
     </div>
   );
 }
+
+// 3. Main Application Component
 export default function App() {
   const [telemetry, setTelemetry] = useState({
     heart_rate: 78,
@@ -145,11 +138,10 @@ export default function App() {
     ionizing_rad: 0.1,
   });
 
-  // Long-duration mission indicators
-  const [cumulativeRad, setCumulativeRad] = useState(14.8); // mSv
-  const [readinessScore, setReadinessScore] = useState(91); // 0-100%
-  const [boneCountermeasure, setBoneCountermeasure] = useState(85); // % of daily ARED done
-  const [cognitiveLoad, setCognitiveLoad] = useState(24); // % fatigue
+  const [cumulativeRad] = useState(14.8);
+  const [readinessScore] = useState(91);
+  const [boneCountermeasure] = useState(85);
+  const [cognitiveLoad] = useState(24);
 
   const [isPaused, setIsPaused] = useState(false);
   const [logs, setLogs] = useState([]);
@@ -221,10 +213,14 @@ export default function App() {
     fetchRecentLogs();
   }, []);
 
+  // HERE IS THE RETURN: It puts the ECG trace right below your header!
   return (
     <div className="dashboard-container">
       <h1 className="header-title">LYNXSTATION // PULSEAERO</h1>
       <p className="header-sub">NASA Autonomous Astronaut Health & Telemetry System</p>
+
+      {/* 60 FPS Real-time Sweeping Canvas ECG */}
+      <ECGWaveform isArrhythmia={stressProfile === 'tachycardia'} />
 
       {/* Emergency Advisory Modal / Banner */}
       {activeEmergency && (
@@ -263,7 +259,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 4 Primary Telemetry HUD Tiles */}
+      {/* 4 HUD Metric Tiles */}
       <div className="hud-grid">
         <div className="hud-card">
           <div className="hud-label">Heart Rate</div>
@@ -294,9 +290,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* NEW: NASA Long-Duration Health Evaluation & Countermeasure Matrix */}
+      {/* NASA Long-Duration Health Indicators & Countermeasures */}
       <div className="eval-section">
-        {/* Left: Astronaut Self-Evaluation Indicators */}
         <div className="eval-card">
           <div className="eval-title">
             <span>Astronaut Health Indicators</span>
@@ -334,7 +329,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right: Prescriptive Countermeasures & Actions */}
         <div className="eval-card">
           <div className="eval-title">
             <span>Prescriptive Countermeasures</span>
@@ -353,7 +347,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Action Controls */}
+      {/* Control Buttons */}
       <div className="controls-row">
         <button className="btn-secondary" onClick={() => setIsPaused(!isPaused)}>
           {isPaused ? 'Resume Telemetry' : 'Pause Telemetry'}
@@ -370,7 +364,7 @@ export default function App() {
         </button>
       </div>
 
-      {/* Autonomous Incident Logs Table */}
+      {/* Supabase Autonomous Audit Log */}
       <div className="logs-card">
         <div className="logs-header">
           <span>Autonomous Clinical Audit Log (Supabase Realtime)</span>
