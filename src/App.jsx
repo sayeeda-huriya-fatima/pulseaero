@@ -3,12 +3,12 @@ import './App.css';
 import { supabase } from './supabaseClient';
 import { BiosignalProcessor } from './processor';
 
-// 1. Emergency Protocols Database
+// 1. Autonomous Clinical Decision Support System (CDSS) Protocols
 const EMERGENCY_PROTOCOLS = {
   'Ventricular Tachycardia': {
     title: 'CARDIAC ARREST / TACHYARRHYTHMIA PROTOCOL',
     severity: 'RED ALERT',
-    broadcast: 'CREW ALERT: Commander experiencing cardiac collapse. All available crew respond to Crew Quarters.',
+    broadcast: 'CREW ALERT: Commander experiencing sudden cardiac collapse. All available crew respond to Crew Quarters.',
     steps: [
       'Deploy AED from Medical Bay (Rack 2).',
       'Expose chest; attach electrode pads (Upper right chest & lower left ribs).',
@@ -25,6 +25,17 @@ const EMERGENCY_PROTOCOLS = {
       'Engage secondary 100% O2 emergency bypass valve.',
       'Check cabin Barometric Pressure indicators.',
       'Position patient seated upright; monitor telemetry recovery.'
+    ]
+  },
+  'Radiation Storm': {
+    title: 'SOLAR PARTICLE EVENT (SPE) / ACUTE FLUX PROTOCOL',
+    severity: 'AMBER WARNING',
+    broadcast: 'ENVIRONMENTAL ALERT: High-energy solar proton flux detected. Exceeds operational baseline.',
+    steps: [
+      'Terminate active Extravehicular Activity (EVA) immediately.',
+      'Direct crew to central storm shelter (Water wall reinforced module).',
+      'Deploy supplemental polyethylene shielding across sleep berths.',
+      'Administer baseline radioprotective antioxidant countermeasures per CMO protocol.'
     ]
   }
 };
@@ -101,7 +112,7 @@ function ECGWaveform({ isArrhythmia }) {
       border: '1px solid #1e293b',
       borderRadius: '8px',
       padding: '1rem',
-      marginBottom: '2rem',
+      marginBottom: '1.5rem',
       boxShadow: 'inset 0 0 20px rgba(0,0,0,0.8)'
     }}>
       <div style={{
@@ -122,14 +133,14 @@ function ECGWaveform({ isArrhythmia }) {
       <canvas
         ref={canvasRef}
         width={860}
-        height={90}
-        style={{ width: '100%', height: '90px', display: 'block' }}
+        height={85}
+        style={{ width: '100%', height: '85px', display: 'block' }}
       />
     </div>
   );
 }
 
-// 3. Main Application Component
+// 3. Primary Mission Console Application
 export default function App() {
   const [telemetry, setTelemetry] = useState({
     heart_rate: 78,
@@ -138,10 +149,11 @@ export default function App() {
     ionizing_rad: 0.1,
   });
 
-  const [cumulativeRad] = useState(14.8);
-  const [readinessScore] = useState(91);
-  const [boneCountermeasure] = useState(85);
-  const [cognitiveLoad] = useState(24);
+  // Long-Duration Health Evaluation Metrics
+  const [cumulativeRad, setCumulativeRad] = useState(14.8);
+  const [readinessScore, setReadinessScore] = useState(91);
+  const [boneCountermeasure, setBoneCountermeasure] = useState(85);
+  const [cognitiveLoad, setCognitiveLoad] = useState(24);
 
   const [isPaused, setIsPaused] = useState(false);
   const [logs, setLogs] = useState([]);
@@ -158,10 +170,19 @@ export default function App() {
       setTelemetry((prev) => {
         let hr = prev.heart_rate;
         let spo2 = prev.spo2;
+        let temp = 36.6;
+        let rad = 0.1;
 
         if (stressProfile === 'tachycardia') {
           hr = Math.min(168, hr + 12);
           spo2 = Math.max(89.2, parseFloat((spo2 - 0.7).toFixed(1)));
+        } else if (stressProfile === 'solar_flare') {
+          rad = 8.4;
+          hr = Math.max(82, Math.min(94, Math.round(hr + (Math.random() * 2 - 1))));
+        } else if (stressProfile === 'eva_workload') {
+          hr = Math.min(138, hr + 6);
+          temp = 37.3;
+          spo2 = 96.5;
         } else {
           hr = Math.max(72, Math.min(84, Math.round(hr + (Math.random() * 2 - 1))));
           spo2 = parseFloat(Math.max(97.5, Math.min(99.4, spo2 + (Math.random() * 0.2 - 0.1))).toFixed(1));
@@ -170,13 +191,28 @@ export default function App() {
         const sample = {
           heart_rate: hr,
           spo2: parseFloat(spo2),
-          core_temp: 36.6,
-          ionizing_rad: 0.1,
+          core_temp: temp,
+          ionizing_rad: rad,
         };
 
         const evaluation = processor.current.ingest(sample);
 
-        if (evaluation.isAnomaly && !incidentLoggedRef.current) {
+        // Evaluate Radiation Storm trigger
+        if (rad > 5.0 && !incidentLoggedRef.current) {
+          incidentLoggedRef.current = true;
+          setActiveEmergency(EMERGENCY_PROTOCOLS['Radiation Storm']);
+          supabase
+            .from('incident_logs')
+            .insert([
+              {
+                crew_member: 'Commander',
+                vital_type: 'Solar Particle Event (SPE)',
+                value: rad,
+                severity: 'WARNING',
+              },
+            ])
+            .then(() => fetchRecentLogs());
+        } else if (evaluation.isAnomaly && !incidentLoggedRef.current) {
           incidentLoggedRef.current = true;
           setActiveEmergency(EMERGENCY_PROTOCOLS[evaluation.type] || null);
 
@@ -213,13 +249,12 @@ export default function App() {
     fetchRecentLogs();
   }, []);
 
-  // HERE IS THE RETURN: It puts the ECG trace right below your header!
   return (
     <div className="dashboard-container">
       <h1 className="header-title">LYNXSTATION // PULSEAERO</h1>
       <p className="header-sub">NASA Autonomous Astronaut Health & Telemetry System</p>
 
-      {/* 60 FPS Real-time Sweeping Canvas ECG */}
+      {/* 60 FPS Real-time Sweeping Canvas ECG Oscilloscope */}
       <ECGWaveform isArrhythmia={stressProfile === 'tachycardia'} />
 
       {/* Emergency Advisory Modal / Banner */}
@@ -231,7 +266,7 @@ export default function App() {
           border: '1px solid #ef4444',
           borderRadius: '8px',
           padding: '1.25rem',
-          marginBottom: '2rem',
+          marginBottom: '1.5rem',
           fontFamily: 'monospace'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
@@ -284,14 +319,15 @@ export default function App() {
 
         <div className="hud-card">
           <div className="hud-label">Ionizing Rad</div>
-          <div className="hud-value val-red">
+          <div className={`hud-value ${telemetry.ionizing_rad > 2.0 ? 'val-red' : 'val-blue'}`}>
             {telemetry.ionizing_rad} <span className="hud-unit">mSv/h</span>
           </div>
         </div>
       </div>
 
-      {/* NASA Long-Duration Health Indicators & Countermeasures */}
+      {/* NASA Long-Duration Health Evaluation & Countermeasure Matrix */}
       <div className="eval-section">
+        {/* Left: Astronaut Self-Evaluation Indicators */}
         <div className="eval-card">
           <div className="eval-title">
             <span>Astronaut Health Indicators</span>
@@ -329,6 +365,7 @@ export default function App() {
           </div>
         </div>
 
+        {/* Right: Prescriptive Countermeasures */}
         <div className="eval-card">
           <div className="eval-title">
             <span>Prescriptive Countermeasures</span>
@@ -347,10 +384,29 @@ export default function App() {
         </div>
       </div>
 
-      {/* Control Buttons */}
-      <div className="controls-row">
+      {/* Control Buttons & Mission Scenario Injectors */}
+      <div className="controls-row" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'center' }}>
         <button className="btn-secondary" onClick={() => setIsPaused(!isPaused)}>
           {isPaused ? 'Resume Telemetry' : 'Pause Telemetry'}
+        </button>
+
+        <button
+          className="btn-secondary"
+          style={{ borderColor: stressProfile === 'solar_flare' ? '#f59e0b' : '#334155' }}
+          onClick={() => {
+            incidentLoggedRef.current = false;
+            setStressProfile(stressProfile === 'solar_flare' ? null : 'solar_flare');
+          }}
+        >
+          {stressProfile === 'solar_flare' ? 'Clear Radiation Storm' : 'Simulate Solar Flare (SPE)'}
+        </button>
+
+        <button
+          className="btn-secondary"
+          style={{ borderColor: stressProfile === 'eva_workload' ? '#38bdf8' : '#334155' }}
+          onClick={() => setStressProfile(stressProfile === 'eva_workload' ? null : 'eva_workload')}
+        >
+          {stressProfile === 'eva_workload' ? 'Complete Spacewalk' : 'Simulate EVA Exertion'}
         </button>
 
         <button
@@ -364,7 +420,7 @@ export default function App() {
         </button>
       </div>
 
-      {/* Supabase Autonomous Audit Log */}
+      {/* Supabase Autonomous Incident Audit Log */}
       <div className="logs-card">
         <div className="logs-header">
           <span>Autonomous Clinical Audit Log (Supabase Realtime)</span>
