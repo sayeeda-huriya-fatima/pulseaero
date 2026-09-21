@@ -16,26 +16,26 @@ const EMERGENCY_PROTOCOLS = {
       'Deliver shock if advised; begin high-quality chest compressions immediately (100–120 bpm).'
     ]
   },
-  'Acute Hypoxemia': {
-    title: 'ACUTE HYPOXEMIA / PERFUSION DROP PROTOCOL',
-    severity: 'YELLOW ADVISORY',
-    broadcast: 'CABIN ADVISORY: Commander SpO2 below critical margins. Assess oxygenation immediately.',
-    steps: [
-      'Inspect suit umbilical connectors and visor seal for pressure drop.',
-      'Engage secondary 100% O2 emergency bypass valve.',
-      'Check cabin Barometric Pressure indicators.',
-      'Position patient seated upright; monitor telemetry recovery.'
-    ]
-  },
-  'Radiation Storm': {
+  'Solar Particle Event': {
     title: 'SOLAR PARTICLE EVENT (SPE) / ACUTE FLUX PROTOCOL',
     severity: 'AMBER WARNING',
-    broadcast: 'ENVIRONMENTAL ALERT: High-energy solar proton flux detected. Exceeds operational baseline.',
+    broadcast: 'ENVIRONMENTAL ALERT: High-energy solar proton flux detected (8.4 mSv/h). Exceeds operational baseline.',
     steps: [
       'Terminate active Extravehicular Activity (EVA) immediately.',
-      'Direct crew to central storm shelter (Water wall reinforced module).',
-      'Deploy supplemental polyethylene shielding across sleep berths.',
+      'Direct all crew members to central storm shelter (Water wall reinforced module).',
+      'Deploy supplemental polyethylene shielding blocks across crew quarters.',
       'Administer baseline radioprotective antioxidant countermeasures per CMO protocol.'
+    ]
+  },
+  'EVA Exertion': {
+    title: 'METABOLIC WORKLOAD & HYPERTHERMIA ADVISORY',
+    severity: 'BLUE ADVISORY',
+    broadcast: 'MISSION ADVISORY: High metabolic output detected during extravehicular operations.',
+    steps: [
+      'Increase Liquid Cooling and Ventilation Garment (LCVG) coolant loop flow rate.',
+      'Enforce 10-minute active physical rest pause on tether.',
+      'Monitor real-time metabolic rate and suit CO2 scrub canister delta-P.',
+      'Ensure core body temperature stabilizes below 37.5°C before resuming traversal.'
     ]
   }
 };
@@ -74,15 +74,15 @@ function ECGWaveform({ isArrhythmia }) {
         }
       } else {
         if (cycle > 15 && cycle < 25) {
-          y = mid - Math.sin((cycle - 15) * 0.314) * 8; // P-Wave
+          y = mid - Math.sin((cycle - 15) * 0.314) * 8;
         } else if (cycle >= 28 && cycle < 31) {
-          y = mid + 6; // Q-Dip
+          y = mid + 6;
         } else if (cycle >= 31 && cycle < 36) {
-          y = mid - (mid * 0.75); // R-Peak
+          y = mid - (mid * 0.75);
         } else if (cycle >= 36 && cycle < 40) {
-          y = mid + 12; // S-Dip
+          y = mid + 12;
         } else if (cycle >= 48 && cycle < 62) {
-          y = mid - Math.sin((cycle - 48) * 0.224) * 14; // T-Wave
+          y = mid - Math.sin((cycle - 48) * 0.224) * 14;
         } else {
           y = mid + (Math.random() * 2 - 1);
         }
@@ -149,11 +149,10 @@ export default function App() {
     ionizing_rad: 0.1,
   });
 
-  // Long-Duration Health Evaluation Metrics
-  const [cumulativeRad, setCumulativeRad] = useState(14.8);
-  const [readinessScore, setReadinessScore] = useState(91);
-  const [boneCountermeasure, setBoneCountermeasure] = useState(85);
-  const [cognitiveLoad, setCognitiveLoad] = useState(24);
+  const [cumulativeRad] = useState(14.8);
+  const [readinessScore] = useState(91);
+  const [boneCountermeasure] = useState(85);
+  const [cognitiveLoad] = useState(24);
 
   const [isPaused, setIsPaused] = useState(false);
   const [logs, setLogs] = useState([]);
@@ -161,7 +160,64 @@ export default function App() {
   const [activeEmergency, setActiveEmergency] = useState(null);
 
   const processor = useRef(new BiosignalProcessor());
-  const incidentLoggedRef = useRef(false);
+
+  const fetchRecentLogs = async () => {
+    const { data } = await supabase
+      .from('incident_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(4);
+    if (data) setLogs(data);
+  };
+
+  useEffect(() => {
+    fetchRecentLogs();
+  }, []);
+
+  const triggerScenario = (scenario) => {
+    if (stressProfile === scenario) {
+      setStressProfile(null);
+      setActiveEmergency(null);
+      return;
+    }
+
+    setStressProfile(scenario);
+
+    if (scenario === 'tachycardia') {
+      setActiveEmergency(EMERGENCY_PROTOCOLS['Ventricular Tachycardia']);
+      supabase
+        .from('incident_logs')
+        .insert([{
+          crew_member: 'Commander',
+          vital_type: 'Ventricular Tachycardia',
+          value: 168,
+          severity: 'CRITICAL',
+        }])
+        .then(() => fetchRecentLogs());
+    } else if (scenario === 'solar_flare') {
+      setActiveEmergency(EMERGENCY_PROTOCOLS['Solar Particle Event']);
+      supabase
+        .from('incident_logs')
+        .insert([{
+          crew_member: 'Commander',
+          vital_type: 'Solar Particle Event (SPE)',
+          value: 8.4,
+          severity: 'WARNING',
+        }])
+        .then(() => fetchRecentLogs());
+    } else if (scenario === 'eva_workload') {
+      setActiveEmergency(EMERGENCY_PROTOCOLS['EVA Exertion']);
+      supabase
+        .from('incident_logs')
+        .insert([{
+          crew_member: 'Commander',
+          vital_type: 'EVA Metabolic Exertion',
+          value: 138,
+          severity: 'ADVISORY',
+        }])
+        .then(() => fetchRecentLogs());
+    }
+  };
 
   useEffect(() => {
     if (isPaused) return;
@@ -195,40 +251,7 @@ export default function App() {
           ionizing_rad: rad,
         };
 
-        const evaluation = processor.current.ingest(sample);
-
-        // Evaluate Radiation Storm trigger
-        if (rad > 5.0 && !incidentLoggedRef.current) {
-          incidentLoggedRef.current = true;
-          setActiveEmergency(EMERGENCY_PROTOCOLS['Radiation Storm']);
-          supabase
-            .from('incident_logs')
-            .insert([
-              {
-                crew_member: 'Commander',
-                vital_type: 'Solar Particle Event (SPE)',
-                value: rad,
-                severity: 'WARNING',
-              },
-            ])
-            .then(() => fetchRecentLogs());
-        } else if (evaluation.isAnomaly && !incidentLoggedRef.current) {
-          incidentLoggedRef.current = true;
-          setActiveEmergency(EMERGENCY_PROTOCOLS[evaluation.type] || null);
-
-          supabase
-            .from('incident_logs')
-            .insert([
-              {
-                crew_member: 'Commander',
-                vital_type: evaluation.type,
-                value: evaluation.value,
-                severity: evaluation.severity,
-              },
-            ])
-            .then(() => fetchRecentLogs());
-        }
-
+        processor.current.ingest(sample);
         return sample;
       });
     }, 1000);
@@ -236,42 +259,41 @@ export default function App() {
     return () => clearInterval(timer);
   }, [isPaused, stressProfile]);
 
-  const fetchRecentLogs = async () => {
-    const { data } = await supabase
-      .from('incident_logs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(4);
-    if (data) setLogs(data);
-  };
-
-  useEffect(() => {
-    fetchRecentLogs();
-  }, []);
-
   return (
     <div className="dashboard-container">
       <h1 className="header-title">LYNXSTATION // PULSEAERO</h1>
       <p className="header-sub">NASA Autonomous Astronaut Health & Telemetry System</p>
 
-      {/* 60 FPS Real-time Sweeping Canvas ECG Oscilloscope */}
       <ECGWaveform isArrhythmia={stressProfile === 'tachycardia'} />
 
-      {/* Emergency Advisory Modal / Banner */}
       {activeEmergency && (
         <div style={{
           width: '100%',
           maxWidth: '900px',
-          background: 'rgba(239, 68, 68, 0.1)',
-          border: '1px solid #ef4444',
+          background: activeEmergency.severity === 'RED ALERT' 
+            ? 'rgba(239, 68, 68, 0.12)' 
+            : activeEmergency.severity === 'AMBER WARNING' 
+            ? 'rgba(245, 158, 11, 0.12)' 
+            : 'rgba(56, 189, 248, 0.12)',
+          border: `1px solid ${
+            activeEmergency.severity === 'RED ALERT' 
+              ? '#ef4444' 
+              : activeEmergency.severity === 'AMBER WARNING' 
+              ? '#f59e0b' 
+              : '#38bdf8'
+          }`,
           borderRadius: '8px',
           padding: '1.25rem',
           marginBottom: '1.5rem',
           fontFamily: 'monospace'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>
-              ⚠️ {activeEmergency.title}
+            <span style={{ 
+              color: activeEmergency.severity === 'RED ALERT' ? '#ef4444' : activeEmergency.severity === 'AMBER WARNING' ? '#f59e0b' : '#38bdf8', 
+              fontWeight: 'bold', 
+              fontSize: '0.9rem' 
+            }}>
+              ⚠️ {activeEmergency.title} [{activeEmergency.severity}]
             </span>
             <button 
               onClick={() => setActiveEmergency(null)}
@@ -280,7 +302,7 @@ export default function App() {
               [DISMISS ADVISORY]
             </button>
           </div>
-          <p style={{ color: '#fca5a5', fontSize: '0.8rem', marginBottom: '1rem' }}>
+          <p style={{ color: '#e2e8f0', fontSize: '0.82rem', marginBottom: '0.75rem' }}>
             {activeEmergency.broadcast}
           </p>
           <div style={{ fontSize: '0.75rem', color: '#e2e8f0' }}>
@@ -294,7 +316,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 4 HUD Metric Tiles */}
       <div className="hud-grid">
         <div className="hud-card">
           <div className="hud-label">Heart Rate</div>
@@ -325,9 +346,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* NASA Long-Duration Health Evaluation & Countermeasure Matrix */}
       <div className="eval-section">
-        {/* Left: Astronaut Self-Evaluation Indicators */}
         <div className="eval-card">
           <div className="eval-title">
             <span>Astronaut Health Indicators</span>
@@ -365,7 +384,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right: Prescriptive Countermeasures */}
         <div className="eval-card">
           <div className="eval-title">
             <span>Prescriptive Countermeasures</span>
@@ -384,7 +402,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Control Buttons & Mission Scenario Injectors */}
       <div className="controls-row" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'center' }}>
         <button className="btn-secondary" onClick={() => setIsPaused(!isPaused)}>
           {isPaused ? 'Resume Telemetry' : 'Pause Telemetry'}
@@ -393,10 +410,7 @@ export default function App() {
         <button
           className="btn-secondary"
           style={{ borderColor: stressProfile === 'solar_flare' ? '#f59e0b' : '#334155' }}
-          onClick={() => {
-            incidentLoggedRef.current = false;
-            setStressProfile(stressProfile === 'solar_flare' ? null : 'solar_flare');
-          }}
+          onClick={() => triggerScenario('solar_flare')}
         >
           {stressProfile === 'solar_flare' ? 'Clear Radiation Storm' : 'Simulate Solar Flare (SPE)'}
         </button>
@@ -404,23 +418,19 @@ export default function App() {
         <button
           className="btn-secondary"
           style={{ borderColor: stressProfile === 'eva_workload' ? '#38bdf8' : '#334155' }}
-          onClick={() => setStressProfile(stressProfile === 'eva_workload' ? null : 'eva_workload')}
+          onClick={() => triggerScenario('eva_workload')}
         >
           {stressProfile === 'eva_workload' ? 'Complete Spacewalk' : 'Simulate EVA Exertion'}
         </button>
 
         <button
           className="btn-alert"
-          onClick={() => {
-            incidentLoggedRef.current = false;
-            setStressProfile(stressProfile === 'tachycardia' ? null : 'tachycardia');
-          }}
+          onClick={() => triggerScenario('tachycardia')}
         >
           {stressProfile === 'tachycardia' ? 'Stabilize Crew' : 'Induce Arrhythmic Event'}
         </button>
       </div>
 
-      {/* Supabase Autonomous Incident Audit Log */}
       <div className="logs-card">
         <div className="logs-header">
           <span>Autonomous Clinical Audit Log (Supabase Realtime)</span>
