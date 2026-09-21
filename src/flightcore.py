@@ -1,103 +1,106 @@
-"""
-PulseAero - Flight Telemetry Edge Daemon (FTED)
-Target Environment: On-orbit avionics / FreeRTOS micro-gateway
-Protocol: Synchronous Frame Telemetry over Serial / UDP
-"""
-
+from dataclasses import dataclass
+from datetime import datetime
+import random
 import time
-import json
-import math
-from datetime import datetime, timezone
 
-class FlightTelemetryCore:
-    def __init__(self, crew_callsign="CDR-01"):
-        self.callsign = crew_callsign
-        self.frame_id = 0
-        # Ring buffer for sliding window evaluation (10 samples)
-        self.buffer_size = 10
-        self.hr_window = []
-        self.spo2_window = []
-        
-    def read_biosensors(self, tick):
-        """
-        Simulates raw hardware I2C/SPI ADC registers.
-        Injects realistic physiological dynamics:
-        - Respiratory sinus arrhythmia (HR wavering with breathing)
-        - Baseline noise
-        """
-        # Micro-fluctuations modeled as sine wave + sensor jitter
-        hr_base = 75.0 + 3.0 * math.sin(tick * 0.2)
-        spo2_base = 98.2 + 0.3 * math.cos(tick * 0.1)
-        core_temp = 36.65 + 0.05 * math.sin(tick * 0.05)
-        radiation = 0.11 # mSv/h background
 
-        return {
-            "hr": round(hr_base, 1),
-            "spo2": round(spo2_base, 1),
-            "temp": round(core_temp, 2),
-            "rad": radiation
-        }
+@dataclass
+class BiometricSample:
+  astronaut_id: str
+  timestamp: str
+  heart_rate: int  # bpm (Target: 55-90)
+  hrv_rmssd: float  # ms - autonomic stress (Target: >35)
+  map_pressure: int  # mmHg - Mean Arterial Pressure (Target: 70-100; >105 indicates fluid shift risks)
+  spo2: float  # % (Target: >=96.0)
+  radiation_msv: float  # cumulative mSv/day
 
-    def evaluate_edge_anomaly(self, raw_vitals):
-        """
-        DSP & State Machine: Runs zero-allocation deterministic triage.
-        Calculates moving mean and flags deviations.
-        """
-        self.hr_window.append(raw_vitals["hr"])
-        self.spo2_window.append(raw_vitals["spo2"])
 
-        if len(self.hr_window) > self.buffer_size:
-            self.hr_window.pop(0)
-            self.spo2_window.pop(0)
+class FlightHealthEngine:
 
-        moving_avg_hr = sum(self.hr_window) / len(self.hr_window)
-        moving_avg_spo2 = sum(self.spo2_window) / len(self.spo2_window)
+  def __init__(self, crew_name: str):
+    self.crew_name = crew_name
 
-        # NASA Bio-advisory thresholds
-        triage = "NOMINAL"
-        fault_code = 0x00
+  def evaluate_sample(self, s: BiometricSample) -> dict:
+    alerts = []
+    actions = []
+    risk_score = 0  # Scale: 0 (Nominal) to 100 (Critical)
 
-        if moving_avg_hr > 140.0:
-            triage = "CRITICAL_TACHYCARDIA"
-            fault_code = 0xE1
-        elif moving_avg_spo2 < 90.0:
-            triage = "CRITICAL_HYPOXIA"
-            fault_code = 0xE2
+    # 1. Cardiovascular / Cephalic Fluid Shift (SANS precursor)
+    if s.map_pressure > 105:
+      risk_score += 35
+      alerts.append(
+          f"ELEVATED MAP ({s.map_pressure} mmHg) - Intracranial fluid shift"
+          " risk"
+      )
+      actions.append("Engage Lower Body Negative Pressure (LBNP) suit: 30 mins")
+    elif s.map_pressure < 65:
+      risk_score += 25
+      alerts.append(f"HYPOTENSION DETECTED ({s.map_pressure} mmHg)")
+      actions.append(
+          "Administer electrolyte hydration pack (750ml); check cabin"
+          " pressure"
+      )
 
-        return triage, fault_code, moving_avg_hr, moving_avg_spo2
+    # 2. Autonomic Tone / Fatigue
+    if s.hrv_rmssd < 25.0:
+      risk_score += 30
+      alerts.append(
+          f"CRITICAL HRV DROP ({s.hrv_rmssd:.1f}ms) - Sympathetic exhaustion"
+      )
+      actions.append(
+          "Mandate sleep cycle extension + cut scheduled EVA load by 50%"
+      )
 
-    def build_telemetry_frame(self, tick):
-        """Packages data into standard Space Packet Protocol format (CCSDS-aligned)"""
-        self.frame_id += 1
-        raw = self.read_biosensors(tick)
-        triage, fault, avg_hr, avg_spo2 = self.evaluate_edge_anomaly(raw)
+    # 3. Hypoxia Check
+    if s.spo2 < 95.0:
+      risk_score += 40
+      alerts.append(f"DESATURATION ({s.spo2:.1f}%)")
+      actions.append("Inspect spacesuit/cabin O2 regulator; switch to reserve O2")
 
-        telemetry_frame = {
-            "sync_word": "0x1ACFFC1D", # Standard CCSDS Frame Sync
-            "frame_seq": self.frame_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "crew": self.callsign,
-            "channels": raw,
-            "edge_dsp": {
-                "rolling_hr": round(avg_hr, 1),
-                "rolling_spo2": round(avg_spo2, 1),
-                "status": triage,
-                "fault_code": hex(fault)
-            }
-        }
-        return telemetry_frame
+    # Determine flight status
+    if risk_score >= 60:
+      status = "RED - MISSION INTERVENTION REQUIRED"
+    elif risk_score >= 30:
+      status = "AMBER - ADAPTIVE COUNTERMEASURES"
+    else:
+      status = "GREEN - NOMINAL BIOMETRICS"
 
-    def run_daemon(self, duration_secs=10):
-        print(f"[*] PulseAero Flight Core Booting...")
-        print(f"[*] Architecture: Radiation-Tolerant Edge Daemon")
-        print(f"[*] Sampling Frequency: 1.0 Hz | Window Size: {self.buffer_size} Frames\n")
-        
-        for tick in range(duration_secs):
-            frame = self.build_telemetry_frame(tick)
-            # Output directly to stdout as formatted telemetry packet
-            print(json.dumps(frame))
-            time.sleep(1.0)
+    return {
+        "status": status,
+        "score": risk_score,
+        "alerts": alerts if alerts else ["All telemetry within mission limits"],
+        "prescribed_actions": (
+            actions if actions else ["Maintain nominal flight protocol"]
+        ),
+    }
 
-if __name__ == "__main__":
-    core = FlightTelemetryCore()
-    core.run_daemon()
+
+# Simulation loop
+engine = FlightHealthEngine(crew_name="Cmdr. V. Patel")
+
+print(f"=== TELEMETRY MONITOR: {engine.crew_name} ===")
+for cycle in range(1, 4):
+  # Synthetic telemetry injection
+  sample = BiometricSample(
+      astronaut_id="ASTRO-01",
+      timestamp=datetime.utcnow().strftime("%H:%M:%S UTC"),
+      heart_rate=random.randint(60, 110),
+      hrv_rmssd=round(random.uniform(18.0, 48.0), 1),
+      map_pressure=random.randint(85, 115),
+      spo2=round(random.uniform(94.0, 99.5), 1),
+      radiation_msv=round(random.uniform(0.1, 0.4), 2),
+  )
+
+  result = engine.evaluate_sample(sample)
+
+  print(
+      f"\n[Packet {cycle}] Time: {sample.timestamp} | HR: {sample.heart_rate}bpm"
+      f" | HRV: {sample.hrv_rmssd}ms | MAP: {sample.map_pressure}mmHg | SpO2:"
+      f" {sample.spo2}%"
+  )
+  print(f"Status: {result['status']} (Risk Index: {result['score']}/100)")
+  print("Alerts: " + " | ".join(result["alerts"]))
+  print("Actions Prescribed:")
+  for act in result["prescribed_actions"]:
+    print(f"  -> {act}")
+  time.sleep(1)
