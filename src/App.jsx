@@ -36,6 +36,12 @@ export default function App() {
     ionizing_rad: 0.1,
   });
 
+  // Long-duration mission indicators
+  const [cumulativeRad, setCumulativeRad] = useState(14.8); // mSv
+  const [readinessScore, setReadinessScore] = useState(91); // 0-100%
+  const [boneCountermeasure, setBoneCountermeasure] = useState(85); // % of daily ARED done
+  const [cognitiveLoad, setCognitiveLoad] = useState(24); // % fatigue
+
   const [isPaused, setIsPaused] = useState(false);
   const [logs, setLogs] = useState([]);
   const [stressProfile, setStressProfile] = useState(null);
@@ -109,7 +115,7 @@ export default function App() {
   return (
     <div className="dashboard-container">
       <h1 className="header-title">LYNXSTATION // PULSEAERO</h1>
-      <p className="header-sub">Autonomous Clinical Triage & Deep-Space Biometric Stream</p>
+      <p className="header-sub">NASA Autonomous Astronaut Health & Telemetry System</p>
 
       {/* Emergency Advisory Modal / Banner */}
       {activeEmergency && (
@@ -148,7 +154,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 4 HUD Metric Tiles */}
+      {/* 4 Primary Telemetry HUD Tiles */}
       <div className="hud-grid">
         <div className="hud-card">
           <div className="hud-label">Heart Rate</div>
@@ -175,6 +181,65 @@ export default function App() {
           <div className="hud-label">Ionizing Rad</div>
           <div className="hud-value val-red">
             {telemetry.ionizing_rad} <span className="hud-unit">mSv/h</span>
+          </div>
+        </div>
+      </div>
+
+      {/* NEW: NASA Long-Duration Health Evaluation & Countermeasure Matrix */}
+      <div className="eval-section">
+        {/* Left: Astronaut Self-Evaluation Indicators */}
+        <div className="eval-card">
+          <div className="eval-title">
+            <span>Astronaut Health Indicators</span>
+            <span style={{ color: readinessScore > 80 ? '#34d399' : '#f59e0b' }}>Readiness: {readinessScore}%</span>
+          </div>
+
+          <div className="metric-bar-group">
+            <div className="metric-bar-header">
+              <span>Cumulative Mission Radiation</span>
+              <span>{cumulativeRad} / 100 mSv</span>
+            </div>
+            <div className="metric-bar-bg">
+              <div className="metric-bar-fill" style={{ width: `${cumulativeRad}%`, background: '#f87171' }}></div>
+            </div>
+          </div>
+
+          <div className="metric-bar-group">
+            <div className="metric-bar-header">
+              <span>Bone/Muscle Countermeasure Target (ARED)</span>
+              <span>{boneCountermeasure}%</span>
+            </div>
+            <div className="metric-bar-bg">
+              <div className="metric-bar-fill" style={{ width: `${boneCountermeasure}%`, background: '#38bdf8' }}></div>
+            </div>
+          </div>
+
+          <div className="metric-bar-group">
+            <div className="metric-bar-header">
+              <span>Behavioral & Cognitive Fatigue Index</span>
+              <span>{cognitiveLoad}% (Nominal)</span>
+            </div>
+            <div className="metric-bar-bg">
+              <div className="metric-bar-fill" style={{ width: `${cognitiveLoad}%`, background: '#a78bfa' }}></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Prescriptive Countermeasures & Actions */}
+        <div className="eval-card">
+          <div className="eval-title">
+            <span>Prescriptive Countermeasures</span>
+            <span style={{ color: '#38bdf8' }}>Autonomous Plan</span>
+          </div>
+
+          <div className="rec-item">
+            🦴 <strong>Musculoskeletal:</strong> Schedule 45 min resistive load on ARED to mitigate microgravity bone mineral density loss.
+          </div>
+          <div className="rec-item">
+            🧠 <strong>Behavioral:</strong> Circadian blue-enriched light therapy (480nm) scheduled for 07:00 UTC cycle.
+          </div>
+          <div className="rec-item warning">
+            🛡️ <strong>Radiation Shielding:</strong> Cumulative dosage tracking nominal. Storm shelter protocol ready if ambient &gt; 5.0 mSv/h.
           </div>
         </div>
       </div>
