@@ -27,7 +27,116 @@ const EMERGENCY_PROTOCOLS = {
     ]
   }
 };
+// Real-time Biosignal Canvas ECG Oscilloscope
+function ECGWaveform({ isArrhythmia }) {
+  const canvasRef = useRef(null);
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let animationFrameId;
+    let x = 0;
+    const height = canvas.height;
+    const width = canvas.width;
+    const mid = height / 2;
+
+    // Clear canvas initial background
+    ctx.fillStyle = '#070b0f';
+    ctx.fillRect(0, 0, width, height);
+
+    const render = () => {
+      // Create trailing phosphor sweep effect
+      ctx.fillStyle = 'rgba(7, 11, 15, 0.08)';
+      ctx.fillRect(x, 0, 8, height);
+
+      let y = mid;
+      const cycle = x % (isArrhythmia ? 45 : 90);
+
+      if (isArrhythmia) {
+        // Chaotic Ventricular Tachycardia Waveform (Wide QRS & Arrhythmic peaks)
+        if (cycle > 10 && cycle < 18) {
+          y = mid - Math.sin((cycle - 10) * 0.4) * (mid * 0.85);
+        } else if (cycle >= 18 && cycle < 28) {
+          y = mid + Math.sin((cycle - 18) * 0.35) * (mid * 0.7);
+        } else {
+          y = mid + (Math.random() * 8 - 4);
+        }
+      } else {
+        // Normal Sinus Rhythm (P - QRS - T complex)
+        if (cycle > 15 && cycle < 25) {
+          // P-Wave
+          y = mid - Math.sin((cycle - 15) * 0.314) * 8;
+        } else if (cycle >= 28 && cycle < 31) {
+          // Q-Dip
+          y = mid + 6;
+        } else if (cycle >= 31 && cycle < 36) {
+          // R-Peak (Sharp ventricular spike)
+          y = mid - (mid * 0.75);
+        } else if (cycle >= 36 && cycle < 40) {
+          // S-Dip
+          y = mid + 12;
+        } else if (cycle >= 48 && cycle < 62) {
+          // T-Wave (Ventricular repolarization)
+          y = mid - Math.sin((cycle - 48) * 0.224) * 14;
+        } else {
+          // Isoelectric baseline with subtle sensor jitter
+          y = mid + (Math.random() * 2 - 1);
+        }
+      }
+
+      // Draw active telemetry sweep line
+      ctx.strokeStyle = isArrhythmia ? '#ef4444' : '#38bdf8';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(x - 1, mid);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+
+      x = (x + 2) % width;
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [isArrhythmia]);
+
+  return (
+    <div style={{
+      width: '100%',
+      maxWidth: '900px',
+      background: '#070b0f',
+      border: '1px solid #1e293b',
+      borderRadius: '8px',
+      padding: '1rem',
+      marginBottom: '2rem',
+      boxShadow: 'inset 0 0 20px rgba(0,0,0,0.8)'
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        fontFamily: 'monospace',
+        fontSize: '0.7rem',
+        color: '#64748b',
+        marginBottom: '0.5rem',
+        textTransform: 'uppercase',
+        letterSpacing: '0.1em'
+      }}>
+        <span>Telemetry Lead II: Real-time Dynamic Vector Waveform</span>
+        <span style={{ color: isArrhythmia ? '#ef4444' : '#38bdf8' }}>
+          {isArrhythmia ? '● CHAOTIC RHYTHM DETECTED' : '● NOMINAL SINUS TRACE'}
+        </span>
+      </div>
+      <canvas
+        ref={canvasRef}
+        width={860}
+        height={100}
+        style={{ width: '100%', height: '100px', display: 'block' }}
+      />
+    </div>
+  );
+}
 export default function App() {
   const [telemetry, setTelemetry] = useState({
     heart_rate: 78,
